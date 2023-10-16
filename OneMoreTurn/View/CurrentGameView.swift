@@ -11,18 +11,17 @@ import Charts
 
 struct CurrentGameView: View {
     
-    @Query var matches: [Match] = []
+    @Query(filter: Match.tonightPredicate()) var matches: [Match] = []
     @Query(filter: #Predicate<Team> {$0.isInGame}) var teams: [Team] = []
     @Query(filter: #Predicate<Player> {$0.isInGame}) var players: [Player] = []
     @Environment(\.modelContext) var context
     @Environment(UserSettings.self) var userSettings
 
-    @State private var isEditingMatch: Bool = false
-    @State private var editingMatchIndex: Int = 0
+    @State private var editingMatch: Match?
     @State private var settingsDetent = PresentationDetent.medium
     
     var dataPoints: [DataPoint] {
-        generateDataPoints()
+        MatchUtil.generateDataPoints(with: matches, and: players, withHandicap: true)
     }
     
     var legend: String {
@@ -45,12 +44,12 @@ struct CurrentGameView: View {
                 Button(action: createNewMatch, label: {
                     Text("OneMoreMatch")
                 })
-                Button(action: deleteAllMatches, label: {
-                    Text("DeleteAll")
-                })
+//                Button(action: deleteAllMatches, label: {
+//                    Text("DeleteAll")
+//                })
             }
-            .sheet(isPresented: $isEditingMatch, content: {
-                MatchDetailsView(match: matches[editingMatchIndex])
+            .sheet(item: $editingMatch, content: { match in
+                MatchDetailsView(match: match)
                     .presentationDetents([.medium, .large], selection: $settingsDetent)
             })
         }
@@ -63,8 +62,7 @@ struct CurrentGameView: View {
                 matchRowView(match)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        editingMatchIndex = index
-                        isEditingMatch = true
+                        editingMatch = match
                     }
             }
         }
@@ -87,11 +85,10 @@ struct CurrentGameView: View {
                 HStack {
                     Text(player.name)
                     Spacer()
-                    Text(String(calcPoints(for:player)))
+                    Text(String(MatchUtil.calcPoints(with: matches, for:player)))
                     Spacer()
-                    Text(String(calcMatchPlayed(for:player)))
+                    Text(String(MatchUtil.calcMatchPlayed(with: matches, for:player)))
                 }
-                
             }
         }
     }
@@ -162,52 +159,7 @@ struct CurrentGameView: View {
         .frame(height: 50)
 
     }
-
-    
-    private func calcPoints(for player: Player) -> Int {
-        let homePoints = matches.filter{$0.homePlayers.contains(player)}.compactMap{$0.homeResult}.map{MatchUtil.mapMatchResultToPoints($0)}.reduce(0, +)
-        
-        
-        let visitPoints = matches.filter{$0.visitPlayers.contains(player)}.compactMap{$0.visitResult}.map{MatchUtil.mapMatchResultToPoints($0)}.reduce(0, +)
-        return homePoints + visitPoints
-    }
-    
-    private func calcMatchPlayed(for player: Player) -> Int {
-        let homePoints = matches.filter{$0.homePlayers.contains(player)}.count
-        let visitPoints = matches.filter{$0.visitPlayers.contains(player)}.count
-        return homePoints + visitPoints
-    }
-    
-    private func generateDataPoints() -> [DataPoint] {
-        var dataPoints: [DataPoint] = []
-
-        for player in players {
-            let homeResultArray = matches.filter{$0.homePlayers.contains(player)}.compactMap{$0.homeResult}
-            
-            let visitResultArray = matches.filter{$0.visitPlayers.contains(player)}.compactMap{$0.visitResult}
-            
-            let winCounts = homeResultArray.filter({$0 == .win}).count + visitResultArray.filter({$0 == .win}).count
-            
-            let drawCounts = homeResultArray.filter({$0 == .draw}).count + visitResultArray.filter({$0 == .draw}).count
-            
-            let loseCounts = homeResultArray.filter({$0 == .lose}).count + visitResultArray.filter({$0 == .lose}).count
-            
-            let totalPoints = winCounts * userSettings.winPoints + drawCounts * userSettings.drawPoints + loseCounts * userSettings.losePoints - player.handicapCount * userSettings.handicapPoints
-            
-            dataPoints.append(DataPoint(player: player, pointType: .pointsEarned, matchResult: .none, points: totalPoints))
-                        
-            dataPoints.append(DataPoint(player: player, pointType: .matchAttended, matchResult: .win, points: winCounts))
-            
-            dataPoints.append(DataPoint(player: player, pointType: .matchAttended, matchResult: .draw, points: drawCounts))
-            
-            dataPoints.append(DataPoint(player: player, pointType: .matchAttended, matchResult: .lose, points: loseCounts))
-
-        }
-        
-        return dataPoints
-    }
-    
-    
+ 
     private func createNewMatch() {
         
         let homeTeamScale = userSettings.homeTeamScale

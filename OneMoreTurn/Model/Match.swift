@@ -59,9 +59,9 @@ final class Match {
 
 extension Match {
     static func tonightPredicate() -> Predicate<Match> {
-        let currentDate = Date.now
+        let yesterdayDate = Date().addingTimeInterval(-1 * 24 * 60 * 60)
         return #Predicate<Match> { match in
-            match.matchDate > currentDate
+            match.matchDate > yesterdayDate
         }
     }
 }
